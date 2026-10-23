@@ -5,17 +5,25 @@
   const configured = Boolean(cfg.url && cfg.publishableKey);
   const sessionKey = 'horysa:cloud-session:v1';
   const userKey = 'horysa:cloud-user:v1';
+  const ownerKey = 'horysa:cloud-owner:v1';
+  const guestSnapshotKey = 'horysa:guest-snapshot:v1';
   const catalogCacheKey = 'horysa:catalog-cache:v1';
   const keys = { favorites: 'horysa:favorites:v1', agenda: 'horysa:agenda:v1', routes: 'horysa:routes:v1' };
   const state = { session: null, user: null, admin: false, entries: [], ready: false, syncTimer: 0 };
   const $ = (selector) => document.querySelector(selector);
   const read = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
   const snapshot = () => Object.fromEntries(Object.entries(keys).map(([name, key]) => [name, read(key, [])]));
+  const emptySnapshot = () => ({ favorites: [], agenda: [], routes: [] });
+  const accountSnapshotKey = () => `horysa:account-snapshot:${state.user?.id || 'guest'}:v1`;
   const saveSnapshot = (data) => Object.entries(keys).forEach(([name, key]) => localStorage.setItem(key, JSON.stringify(Array.isArray(data?.[name]) ? data[name] : [])));
   const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const safeUrl = (value) => { try { const url = new URL(value); return url.protocol === 'https:' ? url.href : ''; } catch { return ''; } };
   const announce = (message) => { const toast = $('#toast'); if (toast) { toast.textContent = message; toast.classList.add('visible'); setTimeout(() => toast.classList.remove('visible'), 2400); } };
   const endpoint = (path) => `${String(cfg.url).replace(/\/$/, '')}${path}`;
+  const emptyActions = () => ({ favorites: {}, agenda: {}, routes: {} });
+  const actionKey = () => `horysa:cloud-actions:${state.user?.id || 'guest'}:v1`;
+  const getActions = () => { const value = read(actionKey(), emptyActions()); return { favorites: value.favorites || {}, agenda: value.agenda || {}, routes: value.routes || {} }; };
+  const saveActions = (value) => localStorage.setItem(actionKey(), JSON.stringify(value));
 
   function setSession(session) {
     state.session = session || null;
@@ -64,16 +72,35 @@
 
   async function syncInitial() {
     if (!state.user) return;
-    const rows = await api(`/rest/v1/user_data?select=data&user_id=eq.${encodeURIComponent(state.user.id)}&limit=1`);
-    const local = snapshot();
-    if (rows?.length) {
-      const remote = rows[0].data || {};
-      saveSnapshot({
-        favorites: [...new Set([...(remote.favorites || []), ...local.favorites])],
-        agenda: mergeLists(local.agenda, remote.agenda),
-        routes: mergeLists(local.routes, remote.routes)
-      });
+    const rows = await api(`/rest/v1/user_data?select=data,updated_at&user_id=eq.${encodeURIComponent(state.user.id)}&limit=1`);
+    const previousOwner = localStorage.getItem(ownerKey);
+    if (!previousOwner) localStorage.setItem(guestSnapshotKey, JSON.stringify(snapshot()));
+    const local = !previousOwner || previousOwner === state.user.id
+      ? snapshot()
+      : read(accountSnapshotKey(), emptySnapshot());
+    if (previousOwner && previousOwner !== state.user.id) saveSnapshot(local);
+    const remote = rows?.[0]?.data || {};
+    const remoteActions = remote.actions || emptyActions();
+    for (const name of Object.keys(keys)) { remoteActions[name] ||= {}; }
+    for (const name of Object.keys(keys)) for (const id of remote.deleted?.[name] || []) {
+      remoteActions[name][id] ||= { at: rows?.[0]?.updated_at || '1970-01-01T00:00:00.000Z', deleted: true };
     }
+    const localActions = getActions();
+    const actions = Object.fromEntries(Object.keys(keys).map(name => {
+      const merged = { ...remoteActions[name] };
+      for (const [id, action] of Object.entries(localActions[name])) {
+        if (!merged[id] || Date.parse(action.at) > Date.parse(merged[id].at)) merged[id] = action;
+      }
+      return [name, merged];
+    }));
+    const merged = Object.fromEntries(Object.keys(keys).map(name => {
+      const values = name === 'favorites' ? [...new Set([...(remote[name] || []), ...local[name]])] : mergeLists(local[name], remote[name]);
+      return [name, values.filter(item => !actions[name][typeof item === 'string' ? item : item?.id]?.deleted)];
+    }));
+    saveActions(actions);
+    saveSnapshot(merged);
+    localStorage.setItem(ownerKey, state.user.id);
+    localStorage.setItem(accountSnapshotKey(), JSON.stringify(merged));
     await pushSnapshot();
     await loadCatalog();
     state.admin = Boolean(await api('/rest/v1/rpc/is_horysa_admin', { method: 'POST', body: '{}' }));
@@ -87,8 +114,9 @@
     try {
       await api('/rest/v1/user_data?on_conflict=user_id', {
         method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify({ user_id: state.user.id, data: snapshot() })
+        body: JSON.stringify({ user_id: state.user.id, data: { ...snapshot(), actions: getActions() } })
       });
+      localStorage.setItem(accountSnapshotKey(), JSON.stringify(snapshot()));
       state.ready = true;
       refreshAccountUi();
     } catch (error) {
@@ -100,6 +128,18 @@
     if (!state.session) return;
     clearTimeout(state.syncTimer);
     state.syncTimer = setTimeout(pushSnapshot, 500);
+  }
+
+  function trackItem(collection, id, deleted) {
+    if (!state.user || !keys[collection] || !id) return;
+    const value = getActions();
+    value[collection][id] = { at: new Date().toISOString(), deleted: Boolean(deleted) };
+    saveActions(value);
+  }
+
+  function restoreGuestSnapshot() {
+    saveSnapshot(read(guestSnapshotKey, emptySnapshot()));
+    localStorage.removeItem(ownerKey);
   }
 
   async function loadCatalog() {
@@ -230,8 +270,8 @@
     if (!state.user || !confirm('Supprimer définitivement votre compte Horysa et les données synchronisées ? Cette action ne peut pas être annulée.')) return;
     try {
       await api('/rest/v1/rpc/delete_my_horysa_account', { method: 'POST', body: '{}' });
+      localStorage.removeItem(actionKey()); localStorage.removeItem(accountSnapshotKey()); restoreGuestSnapshot();
       setSession(null); state.user = null; state.admin = false; localStorage.removeItem(userKey);
-      Object.values(keys).forEach(key => localStorage.removeItem(key));
       $('#account-dialog').close(); announce('Votre compte et ses données ont été supprimés.');
     } catch (e) { $('#account-sync-state').textContent = e.message; }
   }
@@ -239,7 +279,7 @@
   document.addEventListener('click', async (event) => {
     if (event.target.closest('#account-open, [data-account-open]')) { $('#account-dialog').showModal(); refreshAccountUi(); }
     if (event.target.closest('#export-data')) exportData();
-    if (event.target.closest('#sign-out')) { setSession(null); state.user = null; state.admin = false; localStorage.removeItem(userKey); $('#account-dialog').close(); announce('Vous êtes déconnecté.'); }
+    if (event.target.closest('#sign-out')) { localStorage.setItem(accountSnapshotKey(), JSON.stringify(snapshot())); pushSnapshot(); restoreGuestSnapshot(); setSession(null); state.user = null; state.admin = false; localStorage.removeItem(userKey); $('#account-dialog').close(); announce('Vous êtes déconnecté.'); }
     if (event.target.closest('#delete-account')) deleteAccount();
     if (event.target.closest('[data-open-suggestion]')) $('#suggestion-dialog').showModal();
     const reviewButton = event.target.closest('[data-review]');
@@ -253,6 +293,7 @@
   window.HorysaCloud = {
     configured,
     persist,
+    trackItem,
     get admin() { return state.admin; },
     async init() {
       if (configured) {

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'horysa-shell-v5';
+const CACHE_NAME = 'horysa-shell-v6';
 const APP_SHELL = [
   './',
   './index.html',
