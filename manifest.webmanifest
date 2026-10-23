@@ -1,0 +1,16 @@
+{
+  "id": "./",
+  "name": "Horysa — Lagune & ville",
+  "short_name": "Horysa",
+  "description": "Explorez les lieux, les histoires et les idées de sortie du Bénin.",
+  "lang": "fr",
+  "start_url": "./#explorer",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#fbfaf7",
+  "theme_color": "#123f3b",
+  "icons": [
+    { "src": "assets/horysa-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

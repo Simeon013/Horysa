@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#123f3b" />
+  <meta name="description" content="Horysa — découvrez Cotonou à votre rythme, entre lagune et ville." />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="assets/horysa-icon.svg" type="image/svg+xml" />
+  <title>Horysa — Explorer Cotonou</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="app-extras.css?v=4" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="supabase-config.js"></script>
+  <script src="cloud.js" defer></script>
+  <script src="app.js?v=4" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#explorer" data-view="explorer" aria-label="Horysa accueil"><span class="brand-symbol">h</span><span>horysa</span></a>
+      <div class="side-caption">VOTRE BÉNIN, AUTREMENT</div>
+      <nav class="side-nav" aria-label="Navigation principale">
+        <button class="nav-item active" data-view="explorer"><span class="nav-icon">⌂</span><span>Explorer</span></button>
+        <button class="nav-item" data-view="carte"><span class="nav-icon">⌖</span><span>Carte</span></button>
+        <button class="nav-item" data-view="evenements"><span class="nav-icon">✳</span><span>Événements</span></button>
+        <button class="nav-item" data-view="carnet"><span class="nav-icon">▤</span><span>Mon carnet</span><b class="nav-count" id="saved-count">0</b></button>
+        <button class="nav-item" data-view="agenda"><span class="nav-icon">▦</span><span>Mon agenda</span></button>
+        <button class="nav-item" data-view="histoires"><span class="nav-icon">✳</span><span>Histoires</span></button>
+        <button class="nav-item" data-view="proposer"><span class="nav-icon">＋</span><span>Proposer une adresse</span></button>
+        <button class="nav-item" data-view="moderation" hidden><span class="nav-icon">✳</span><span>Modération</span></button>
+      </nav>
+      <div class="side-bottom">
+        <div class="city-mini"><span class="city-pin">●</span><div><small>VOUS EXPLOREZ</small><strong>Cotonou, Bénin</strong></div><span class="city-chevron">⌄</span></div>
+        <p>Une première escale.<br /><span>Le voyage continue.</span></p>
+        <div class="side-bottom-mark">06°22′ N <i>·</i> 02°25′ E</div>
+      </div>
+    </aside>
+
+    <div class="main-column">
+      <header class="topbar">
+        <button class="mobile-brand" data-view="explorer"><span class="brand-symbol">h</span><span>horysa</span></button>
+        <div class="crumb"><span>BÉNIN</span><b>/</b><strong id="crumb-current">EXPLORER</strong></div>
+        <div class="top-actions">
+          <label class="search-box" for="global-search"><span class="search-icon">⌕</span><input type="search" id="global-search" placeholder="Un lieu, une envie…" autocomplete="off"/><kbd>⌘ K</kbd><div class="search-results" id="search-results"></div></label>
+          <button class="install-button" id="install-app" hidden>Installer</button><button class="account-button" id="account-open" type="button">Compte</button><button class="avatar" data-view="carnet" aria-label="Ouvrir mon carnet">S</button>
+        </div>
+      </header>
+      <main id="view-root" tabindex="-1"></main>
+      <footer class="site-footer"><span>Horysa <i>·</i> Lagune &amp; ville</span><span>Guide indépendant · Cotonou, première escale</span></footer>
+    </div>
+  </div>
+
+  <nav class="bottom-nav" aria-label="Navigation mobile">
+    <button data-view="explorer" class="active"><span>⌂</span>Explorer</button><button data-view="carte"><span>⌖</span>Carte</button><button data-view="evenements"><span>✳</span>Sortir</button><button data-view="carnet"><span>▤</span>Carnet</button><button data-view="agenda"><span>▦</span>Agenda</button>
+  </nav>
+
+  <dialog id="place-dialog" class="place-dialog"><button class="dialog-x" data-close aria-label="Fermer">×</button><div id="dialog-body"></div></dialog>
+  <dialog id="event-dialog" class="event-dialog"><button class="dialog-x" data-close aria-label="Fermer">×</button><div class="dialog-kicker">VOTRE CARNET · COTONOU</div><h2>Préparer une sortie</h2><p class="dialog-intro">Ajoutez une idée à votre agenda personnel. Un compte Horysa permet de la retrouver sur vos autres appareils.</p>
+    <form id="event-form">
+      <label>Le nom de votre sortie<input name="title" required maxlength="70" placeholder="Ex. Promenade sur la Marina" /></label>
+      <div class="form-row"><label>La date<input name="date" type="date" required /></label><label>L’heure<input name="time" type="time" value="16:00" /></label></div>
+      <label>Le lieu<select name="place"><option value="">À définir</option></select></label>
+      <label>Une note <span class="optional">facultatif</span><textarea name="note" rows="3" maxlength="180" placeholder="Un détail à ne pas oublier…"></textarea></label>
+      <div class="form-error" id="form-error" role="alert"></div><button class="primary-button full" type="submit">Ajouter à mon agenda <span>↗</span></button>
+    </form>
+  </dialog>
+  <dialog id="route-dialog" class="event-dialog"><button class="dialog-x" data-close aria-label="Fermer">×</button><div class="dialog-kicker">VOTRE CARNET · COTONOU</div><h2>Composer une balade</h2><p class="dialog-intro">Choisissez vos étapes, puis réorganisez-les. Un compte Horysa permet de la retrouver sur vos autres appareils.</p>
+    <form id="route-form"><label>Le nom de votre balade<input name="title" required maxlength="60" placeholder="Ex. Art et bord de mer" /></label><fieldset class="route-picker"><legend>Choisissez au moins deux étapes, puis ordonnez-les</legend><div id="route-place-options"></div></fieldset><div class="route-order-preview" id="route-order-preview"></div><div class="form-error" id="route-error" role="alert"></div><button class="primary-button full" type="submit">Enregistrer ma balade <span>↗</span></button></form>
+  </dialog>
+  <dialog id="account-dialog" class="event-dialog account-dialog"><button class="dialog-x" data-close aria-label="Fermer">×</button><div class="dialog-kicker">VOTRE ESPACE HORYSA</div><h2 id="account-title">Votre carnet, partout.</h2><p class="dialog-intro" id="account-message">Explorez librement. Connectez-vous par lien e-mail pour synchroniser vos favoris, balades et sorties.</p><form id="account-form"><label>Votre adresse e-mail<input type="email" name="email" autocomplete="email" required placeholder="vous@exemple.com" /></label><div class="form-error" id="account-error" role="alert"></div><button class="primary-button full" type="submit">Recevoir mon lien de connexion <span>↗</span></button></form><div class="account-actions"><button class="secondary-button" id="export-data" type="button">Exporter mes données</button><button class="text-link" id="sign-out" type="button" hidden>Se déconnecter</button><button class="text-link danger-link" id="delete-account" type="button" hidden>Supprimer mon compte et mes données</button></div><p class="account-sync-state" id="account-sync-state" aria-live="polite"></p></dialog>
+  <dialog id="suggestion-dialog" class="event-dialog"><button class="dialog-x" data-close aria-label="Fermer">×</button><div class="dialog-kicker">PARTICIPER À HORYSA</div><h2>Une adresse à partager ?</h2><p class="dialog-intro">Les propositions sont vérifiées avant publication. Connectez-vous pour envoyer la vôtre.</p><form id="suggestion-form"><label>Type de proposition<select name="kind"><option value="place">Un lieu</option><option value="event">Un événement</option></select></label><label>Nom<input name="title" required maxlength="100" /></label><label>Ville<input name="city" required maxlength="80" value="Cotonou" /></label><label>Lieu ou quartier<input name="area" maxlength="120" /></label><label>Date de début <span class="optional">pour un événement</span><input type="datetime-local" name="starts_at" /></label><label>Date de fin <span class="optional">facultatif</span><input type="datetime-local" name="ends_at" /></label><label>Votre description<textarea name="description" required maxlength="1200" rows="4"></textarea></label><label>Source publique ou site officiel <span class="optional">recommandé</span><input type="url" name="source_url" maxlength="500" placeholder="https://" /></label><div class="form-error" id="suggestion-error" role="alert"></div><button class="primary-button full" type="submit">Envoyer pour vérification <span>↗</span></button></form></dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="offline-banner" id="offline-banner" role="status" hidden>Vous êtes hors connexion. Les fiches enregistrées restent disponibles ; la carte nécessite Internet.</div>
+</body>
+</html>
