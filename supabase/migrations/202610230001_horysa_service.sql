@@ -31,7 +31,7 @@ grant execute on function public.is_horysa_admin() to authenticated;
 create table if not exists public.user_data (
   user_id uuid primary key references auth.users(id) on delete cascade,
   data jsonb not null default '{"favorites":[],"agenda":[],"routes":[]}'::jsonb
-    check (jsonb_typeof(data) = 'object'),
+    check (jsonb_typeof(data) = 'object' and octet_length(data::text) <= 250000),
   updated_at timestamptz not null default now()
 );
 alter table public.user_data enable row level security;
